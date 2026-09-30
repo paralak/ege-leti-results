@@ -1,0 +1,5 @@
+debug.log
+webcache/
+www/ege_tester/uploads/*
+!www/ege_tester/uploads/.gitkeep
+
