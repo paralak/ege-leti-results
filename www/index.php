@@ -232,6 +232,8 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
     $totalTasks = count($tasksArray);
     $answered = 0;
     $correct = 0;
+    $score = 0;
+    $maxScore = 0;
 
     foreach ($tasksArray as $taskID => $task) {
         if (isset($answersMap[$taskID]) && trim($answersMap[$taskID]['value']) !== '') {
@@ -240,18 +242,38 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
                 $correct++;
             }
         }
+        $taskMax = in_array($task['number'], [26, 27], true) ? 2 : 1;
+        $maxScore += $taskMax;
+        $score += scoreAnswer($task['correct_answer'], $answersMap[$taskID]['value'] ?? '', $task['answer_type'], $task['number']);
     }
 
-    $percentage = $totalTasks > 0 ? round(($correct / $totalTasks) * 100, 1) : 0;
+    $percentage = $maxScore > 0 ? round(($score / $maxScore) * 100, 1) : 0;
 
     $stats = [
         'totalTasks' => $totalTasks,
         'answered' => $answered,
         'correct' => $correct,
+        'score' => $score,
+        'maxScore' => $maxScore,
         'percentage' => $percentage
     ];
 
     return [$tasksArray, $answersMap, $stats];
+}
+
+function scoreAnswer($correctAnswer, $userAnswer, $answerType, $taskNumber) {
+    if (trim((string)$userAnswer) === '') return 0;
+    if (!in_array((int)$taskNumber, [26, 27], true)) {
+        return checkAnswer($correctAnswer, $userAnswer, $answerType) ? 1 : 0;
+    }
+    $correct = array_map('trim', explode(';', $correctAnswer));
+    $user = array_map('trim', explode(';', $userAnswer));
+    if (count($correct) === 2 && count($user) === 2) {
+        if ($user === $correct) return 2;
+        if (($user[0] === $correct[0]) || ($user[1] === $correct[1]) ||
+            ($user[0] === $correct[1] && $user[1] === $correct[0])) return 1;
+    }
+    return 0;
 }
 
 // Функция для проверки ответов
@@ -523,8 +545,8 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                 <div class="stat-label">Выполнено</div>
             </div>
             <div class="stat-item">
-                <div class="stat-number"><?= $stats['correct'] ?></div>
-                <div class="stat-label">Правильно</div>
+                <div class="stat-number"><?= $stats['score'] ?>/<?= $stats['maxScore'] ?></div>
+                <div class="stat-label">Первичный балл</div>
             </div>
             <div class="stat-item">
                 <div class="stat-number"><?= $stats['percentage'] ?>%</div>
@@ -971,8 +993,8 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                 <div class="stat-label">Выполнено</div>
             </div>
             <div class="stat-item">
-                <div class="stat-number"><?= $stats['correct'] ?></div>
-                <div class="stat-label">Правильно</div>
+                <div class="stat-number"><?= $stats['score'] ?>/<?= $stats['maxScore'] ?></div>
+                <div class="stat-label">Первичный балл</div>
             </div>
             <div class="stat-item">
                 <div class="stat-number"><?= $stats['percentage'] ?>%</div>
