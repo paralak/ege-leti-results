@@ -234,7 +234,7 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
     $correct = 0;
 
     foreach ($tasksArray as $taskID => $task) {
-        if (isset($answersMap[$taskID]) && !empty(trim($answersMap[$taskID]['value']))) {
+        if (isset($answersMap[$taskID]) && trim($answersMap[$taskID]['value']) !== '') {
             $answered++;
             if (checkAnswer($task['correct_answer'], $answersMap[$taskID]['value'], $task['answer_type'])) {
                 $correct++;
@@ -256,7 +256,7 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
 
 // Функция для проверки ответов
 function checkAnswer($correctAnswer, $userAnswer, $answerType) {
-    if (empty($userAnswer)) {
+    if (trim((string)$userAnswer) === '') {
         return false;
     }
 
@@ -547,7 +547,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                 <?php foreach ($tasksArray as $taskID => $task): ?>
                     <?php
                     $userAnswer = isset($answersMap[$taskID]) ? $answersMap[$taskID]['value'] : '';
-                    $isAnswered = !empty(trim($userAnswer));
+                    $isAnswered = trim($userAnswer) !== '';
                     $isCorrect = $isAnswered ? checkAnswer($task['correct_answer'], $userAnswer, $task['answer_type']) : false;
 
                     $rowClass = '';
@@ -571,7 +571,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                             <?php if ($task['answer_type'] === 'table'): ?>
                                 <?php
                                 $correctValues = explode(';', $task['correct_answer']);
-                                echo '[' . implode('; ', $correctValues) . ']';
+                                echo '[' . htmlspecialchars(implode('; ', $correctValues)) . ']';
                                 ?>
                             <?php else: ?>
                                 <?= htmlspecialchars($task['correct_answer']) ?>
@@ -582,7 +582,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                                 <?php if ($task['answer_type'] === 'table'): ?>
                                     <?php
                                     $userValues = explode(';', $userAnswer);
-                                    echo '[' . implode('; ', $userValues) . ']';
+                                    echo '[' . htmlspecialchars(implode('; ', $userValues)) . ']';
                                     ?>
                                 <?php else: ?>
                                     <?= htmlspecialchars($userAnswer) ?>
@@ -996,7 +996,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                     <?php foreach ($tasksArray as $taskID => $task): ?>
                         <?php
                         $userAnswer = isset($answersMap[$taskID]) ? $answersMap[$taskID]['value'] : '';
-                        $isAnswered = !empty(trim($userAnswer));
+                        $isAnswered = trim($userAnswer) !== '';
                         $isCorrect = $isAnswered ? checkAnswer($task['correct_answer'], $userAnswer, $task['answer_type']) : false;
 
                         $rowClass = '';
@@ -1020,7 +1020,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                                 <?php if ($task['answer_type'] === 'table'): ?>
                                     <?php
                                     $correctValues = explode(';', $task['correct_answer']);
-                                    echo '[' . implode('; ', $correctValues) . ']';
+                                    echo '[' . htmlspecialchars(implode('; ', $correctValues)) . ']';
                                     ?>
                                 <?php else: ?>
                                     <?= htmlspecialchars($task['correct_answer']) ?>
@@ -1031,7 +1031,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                                     <?php if ($task['answer_type'] === 'table'): ?>
                                         <?php
                                         $userValues = explode(';', $userAnswer);
-                                        echo '[' . implode('; ', $userValues) . ']';
+                                        echo '[' . htmlspecialchars(implode('; ', $userValues)) . ']';
                                         ?>
                                     <?php else: ?>
                                         <?= htmlspecialchars($userAnswer) ?>
