@@ -453,6 +453,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
             background-color: #dc3545;
             color: white;
         }
+        .score-partial { background-color: #17a2b8; color: white; }
 
         .legend {
             margin-top: 30px;
@@ -618,7 +619,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                         </td>
                         <td>
                             <?php if ($isAnswered): ?>
-                                <span class="score-circle <?= $taskScore === $taskMaxScore ? 'score-correct' : 'score-incorrect' ?>">
+                                <span class="score-circle <?= $taskScore === $taskMaxScore ? 'score-correct' : ($taskScore > 0 ? 'score-partial' : 'score-incorrect') ?>">
                                     <?= $taskScore ?>/<?= $taskMaxScore ?>
                                 </span>
                             <?php else: ?>
@@ -862,6 +863,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
             background-color: #dc3545;
             color: white;
         }
+        .score-partial { background-color: #17a2b8; color: white; }
 
         .file-info {
             background: #e3f2fd;
@@ -1074,7 +1076,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                             </td>
                             <td>
                                 <?php if ($isAnswered): ?>
-                                    <span class="score-circle <?= $taskScore === $taskMaxScore ? 'score-correct' : 'score-incorrect' ?>">
+                                    <span class="score-circle <?= $taskScore === $taskMaxScore ? 'score-correct' : ($taskScore > 0 ? 'score-partial' : 'score-incorrect') ?>">
                                         <?= $taskScore ?>/<?= $taskMaxScore ?>
                                     </span>
                                 <?php else: ?>
