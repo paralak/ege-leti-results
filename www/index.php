@@ -1,5 +1,5 @@
 <?php
-function uploadXml($field, $expectedRoot, $targetName) {
+function uploadXml($field, $expectedRoot, $targetName, $expectedKind = '') {
     if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) {
         throw new RuntimeException('Не удалось загрузить один из XML-файлов');
     }
@@ -8,6 +8,9 @@ function uploadXml($field, $expectedRoot, $targetName) {
     $xml = simplexml_load_file($_FILES[$field]['tmp_name']);
     if ($xml === false || $xml->getName() !== $expectedRoot) {
         throw new RuntimeException("Файл $field имеет неверный формат");
+    }
+    if ($expectedKind !== '' && (string)$xml['kind'] !== $expectedKind) {
+        throw new RuntimeException("Файл $field имеет неверное назначение");
     }
 
     $uploadDir = __DIR__ . '/uploads';
@@ -25,7 +28,12 @@ function uploadXml($field, $expectedRoot, $targetName) {
 
 function uploadedPath($queryName) {
     $name = isset($_GET[$queryName]) ? basename($_GET[$queryName]) : '';
-    $expectedName = $queryName === 'tasks' ? 'tasks_with_answers.xml' : 'answers.xml';
+    $expectedNames = [
+        'tasks' => 'tasks.xml',
+        'key' => 'answer_key.xml',
+        'answers' => 'answers.xml',
+    ];
+    $expectedName = $expectedNames[$queryName] ?? '';
     if ($name !== $expectedName) {
         return '';
     }
@@ -34,13 +42,27 @@ function uploadedPath($queryName) {
     return is_file($path) ? $path : '';
 }
 
+function xmlVariantId($filename) {
+    $xml = simplexml_load_file(__DIR__ . '/uploads/' . $filename);
+    return $xml !== false ? (string)$xml['variant_id'] : '';
+}
+
 // Обработка загрузки файлов
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_FILES['tasksFile']) && isset($_FILES['answersFile'])) {
+    if (isset($_FILES['tasksFile'], $_FILES['keyFile'], $_FILES['answersFile'])) {
         try {
-            $tasksName = uploadXml('tasksFile', 'tasks', 'tasks_with_answers.xml');
-            $answersName = uploadXml('answersFile', 'answers', 'answers.xml');
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?tasks=' . urlencode($tasksName) . '&answers=' . urlencode($answersName));
+            $tasksName = uploadXml('tasksFile', 'tasks', 'tasks.xml');
+            $keyName = uploadXml('keyFile', 'answers', 'answer_key.xml', 'key');
+            $answersName = uploadXml('answersFile', 'answers', 'answers.xml', 'student');
+            $variantIds = [
+                xmlVariantId($tasksName),
+                xmlVariantId($keyName),
+                xmlVariantId($answersName),
+            ];
+            if (in_array('', $variantIds, true) || count(array_unique($variantIds)) !== 1) {
+                throw new RuntimeException('Выбранные XML-файлы относятся к разным вариантам');
+            }
+            header('Location: ' . $_SERVER['PHP_SELF'] . '?tasks=' . urlencode($tasksName) . '&key=' . urlencode($keyName) . '&answers=' . urlencode($answersName));
             exit;
         } catch (Throwable $error) {
             $uploadError = $error->getMessage();
@@ -57,10 +79,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Функция для выгрузки результатов
 function exportResults() {
     $tasksFilePath = uploadedPath('tasks');
+    $keyFilePath = uploadedPath('key');
     $answersFilePath = uploadedPath('answers');
 
     // Загружаем данные
-    list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $answersFilePath);
+    list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, $answersFilePath);
 
     // Генерируем HTML для выгрузки
     $html = generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $answersFilePath);
@@ -73,7 +96,7 @@ function exportResults() {
 }
 
 // Функция для загрузки данных
-function loadData($tasksFilePath, $answersFilePath) {
+function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
     function loadXmlFile($filename) {
         if (!file_exists($filename)) {
             return new SimpleXMLElement('<?xml version="1.0"?><empty></empty>');
@@ -94,24 +117,33 @@ function loadData($tasksFilePath, $answersFilePath) {
     }
 
     $tasks = loadXmlFile($tasksFilePath);
+    $key = loadXmlFile($keyFilePath);
     $answers = loadXmlFile($answersFilePath);
 
     $tasksArray = [];
     $answersMap = [];
 
     foreach ($tasks->task as $task) {
-        $tasksArray[(string)$task->number] = [
+        $taskId = (string)$task->id;
+        $tasksArray[$taskId] = [
             'number' => (int)$task->number,
             'title' => (string)$task->title,
             'answer_type' => (string)$task->answer_type,
-            'correct_answer' => (string)$task->answer,
+            'correct_answer' => '',
             'table_rows' => isset($task->table_rows) ? (int)$task->table_rows : null,
             'table_columns' => isset($task->table_columns) ? (int)$task->table_columns : null
         ];
     }
 
+    foreach ($key->answer as $answer) {
+        $taskId = (string)$answer['task_id'];
+        if (isset($tasksArray[$taskId])) {
+            $tasksArray[$taskId]['correct_answer'] = (string)$answer->value;
+        }
+    }
+
     foreach ($answers->answer as $answer) {
-        $taskID = (string)$answer->number;
+        $taskID = (string)$answer['task_id'];
         $answersMap[$taskID] = [
             'number' => (int)$answer->number,
             'value' => (string)$answer->value
@@ -530,10 +562,11 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
 
 // Получаем пути к файлам из параметров или используем по умолчанию
 $tasksFilePath = uploadedPath('tasks');
+$keyFilePath = uploadedPath('key');
 $answersFilePath = uploadedPath('answers');
 
 // Загружаем данные для отображения на странице
-list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $answersFilePath);
+list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, $answersFilePath);
 ?>
 
 <!DOCTYPE html>
@@ -810,6 +843,11 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $answersFilePa
                 </div>
 
                 <div class="file-input-group">
+                    <label for="keyFile">Ключ ответов:</label>
+                    <input type="file" id="keyFile" name="keyFile" accept=".xml" required>
+                </div>
+
+                <div class="file-input-group">
                     <label for="answersFile">Ответы:</label>
                     <input type="file" id="answersFile" name="answersFile" accept=".xml" required>
                 </div>
@@ -820,6 +858,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $answersFilePa
             <div class="current-files">
                 <strong>Текущие файлы:</strong><br>
                 Задачи: <?= htmlspecialchars(basename($tasksFilePath)) ?><br>
+                Ключ: <?= htmlspecialchars(basename($keyFilePath)) ?><br>
                 Ответы: <?= htmlspecialchars(basename($answersFilePath)) ?>
             </div>
         </div>
@@ -844,6 +883,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $answersFilePa
             <strong>Информация о файлах:</strong><br>
             Загружено задач: <?= $stats['totalTasks'] ?><br>
             Файл задач: <?= htmlspecialchars(basename($tasksFilePath)) ?><br>
+            Ключ ответов: <?= htmlspecialchars(basename($keyFilePath)) ?><br>
             Файл ответов: <?= htmlspecialchars(basename($answersFilePath)) ?>
         </div>
 
