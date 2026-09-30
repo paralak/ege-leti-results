@@ -1,11 +1,11 @@
 <?php
-function uploadXml($field, $expectedRoot, $targetName, $expectedKind = '') {
+function stageUploadedXml($field, $expectedRoot, $targetName, $expectedKind = '') {
     if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) {
         throw new RuntimeException('Не удалось загрузить один из XML-файлов');
     }
 
     libxml_use_internal_errors(true);
-    $xml = simplexml_load_file($_FILES[$field]['tmp_name']);
+    $xml = simplexml_load_file($_FILES[$field]['tmp_name'], 'SimpleXMLElement', LIBXML_NONET);
     if ($xml === false || $xml->getName() !== $expectedRoot) {
         throw new RuntimeException("Файл $field имеет неверный формат");
     }
@@ -19,11 +19,81 @@ function uploadXml($field, $expectedRoot, $targetName, $expectedKind = '') {
     }
 
     $target = $uploadDir . DIRECTORY_SEPARATOR . $targetName;
-    if (!move_uploaded_file($_FILES[$field]['tmp_name'], $target)) {
+    $staged = $target . '.new.' . bin2hex(random_bytes(4));
+    if (!move_uploaded_file($_FILES[$field]['tmp_name'], $staged)) {
         throw new RuntimeException("Не удалось сохранить файл $field");
     }
 
-    return $targetName;
+    return ['staged' => $staged, 'target' => $target, 'name' => $targetName, 'variant_id' => (string)$xml['variant_id'], 'xml' => $xml];
+}
+
+function validateBundle($tasks, $key, $answers) {
+    $taskMap = [];
+    foreach ($tasks->task as $task) {
+        $id = (string)$task->id;
+        $number = (int)$task->number;
+        if ($id === '' || isset($taskMap[$id])) {
+            throw new RuntimeException('tasks.xml содержит пустые или повторяющиеся task_id');
+        }
+        $taskMap[$id] = $number;
+    }
+
+    $keyIds = [];
+    foreach ($key->answer as $answer) {
+        $id = (string)$answer['task_id'];
+        if (!isset($taskMap[$id]) || isset($keyIds[$id]) || (int)$answer['number'] !== $taskMap[$id]) {
+            throw new RuntimeException('answer_key.xml не соответствует списку заданий');
+        }
+        $keyIds[$id] = true;
+    }
+    if (count($keyIds) !== count($taskMap)) {
+        throw new RuntimeException('answer_key.xml содержит не все ответы');
+    }
+
+    $studentIds = [];
+    foreach ($answers->answer as $answer) {
+        $id = (string)$answer['task_id'];
+        if (!isset($taskMap[$id]) || isset($studentIds[$id]) || (int)$answer['number'] !== $taskMap[$id]) {
+            throw new RuntimeException('answers.xml содержит неизвестные или повторяющиеся задания');
+        }
+        $studentIds[$id] = true;
+    }
+}
+
+function installStagedFiles(array $files) {
+    $backups = [];
+    $installed = [];
+    try {
+        foreach ($files as $file) {
+            if (is_file($file['target'])) {
+                $backup = $file['target'] . '.bak.' . bin2hex(random_bytes(4));
+                if (!rename($file['target'], $backup)) {
+                    throw new RuntimeException('Не удалось подготовить замену загруженных файлов');
+                }
+                $backups[$file['target']] = $backup;
+            }
+        }
+        foreach ($files as $file) {
+            if (!rename($file['staged'], $file['target'])) {
+                throw new RuntimeException('Не удалось установить загруженные файлы');
+            }
+            $installed[] = $file['target'];
+        }
+        foreach ($backups as $backup) {
+            @unlink($backup);
+        }
+    } catch (Throwable $error) {
+        foreach ($installed as $target) {
+            @unlink($target);
+        }
+        foreach ($backups as $target => $backup) {
+            @rename($backup, $target);
+        }
+        foreach ($files as $file) {
+            @unlink($file['staged']);
+        }
+        throw $error;
+    }
 }
 
 function uploadedPath($queryName) {
@@ -42,29 +112,33 @@ function uploadedPath($queryName) {
     return is_file($path) ? $path : '';
 }
 
-function xmlVariantId($filename) {
-    $xml = simplexml_load_file(__DIR__ . '/uploads/' . $filename);
-    return $xml !== false ? (string)$xml['variant_id'] : '';
-}
-
 // Обработка загрузки файлов
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_FILES['tasksFile'], $_FILES['keyFile'], $_FILES['answersFile'])) {
         try {
-            $tasksName = uploadXml('tasksFile', 'tasks', 'tasks.xml');
-            $keyName = uploadXml('keyFile', 'answers', 'answer_key.xml', 'key');
-            $answersName = uploadXml('answersFile', 'answers', 'answers.xml', 'student');
-            $variantIds = [
-                xmlVariantId($tasksName),
-                xmlVariantId($keyName),
-                xmlVariantId($answersName),
+            $stagedFiles = [
+                stageUploadedXml('tasksFile', 'tasks', 'tasks.xml'),
+                stageUploadedXml('keyFile', 'answers', 'answer_key.xml', 'key'),
+                stageUploadedXml('answersFile', 'answers', 'answers.xml', 'student'),
             ];
+            $variantIds = array_column($stagedFiles, 'variant_id');
             if (in_array('', $variantIds, true) || count(array_unique($variantIds)) !== 1) {
+                foreach ($stagedFiles as $file) {
+                    @unlink($file['staged']);
+                }
                 throw new RuntimeException('Выбранные XML-файлы относятся к разным вариантам');
             }
+            validateBundle($stagedFiles[0]['xml'], $stagedFiles[1]['xml'], $stagedFiles[2]['xml']);
+            installStagedFiles($stagedFiles);
+            $tasksName = $stagedFiles[0]['name'];
+            $keyName = $stagedFiles[1]['name'];
+            $answersName = $stagedFiles[2]['name'];
             header('Location: ' . $_SERVER['PHP_SELF'] . '?tasks=' . urlencode($tasksName) . '&key=' . urlencode($keyName) . '&answers=' . urlencode($answersName));
             exit;
         } catch (Throwable $error) {
+            foreach (glob(__DIR__ . '/uploads/*.new.*') ?: [] as $temporaryUpload) {
+                @unlink($temporaryUpload);
+            }
             $uploadError = $error->getMessage();
         }
     }
@@ -108,7 +182,7 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
         }
 
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($content);
+        $xml = simplexml_load_string($content, 'SimpleXMLElement', LIBXML_NONET);
         if ($xml === false) {
             return new SimpleXMLElement('<?xml version="1.0"?><empty></empty>');
         }
@@ -145,7 +219,7 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
     foreach ($answers->answer as $answer) {
         $taskID = (string)$answer['task_id'];
         $answersMap[$taskID] = [
-            'number' => (int)$answer->number,
+            'number' => (int)$answer['number'],
             'value' => (string)$answer->value
         ];
     }
