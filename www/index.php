@@ -418,6 +418,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
             background-color: #f8d7da !important;
             color: #721c24;
         }
+        .partial { background-color: #d1ecf1 !important; color: #0c5460; }
 
         .no-answer {
             background-color: #fff3cd !important;
@@ -434,7 +435,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
 
         .score-circle {
             display: inline-block;
-            width: 30px;
+            min-width: 44px;
             height: 30px;
             border-radius: 50%;
             text-align: center;
@@ -571,10 +572,12 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                     $userAnswer = isset($answersMap[$taskID]) ? $answersMap[$taskID]['value'] : '';
                     $isAnswered = trim($userAnswer) !== '';
                     $isCorrect = $isAnswered ? checkAnswer($task['correct_answer'], $userAnswer, $task['answer_type']) : false;
+                    $taskMaxScore = in_array($task['number'], [26, 27], true) ? 2 : 1;
+                    $taskScore = scoreAnswer($task['correct_answer'], $userAnswer, $task['answer_type'], $task['number']);
 
                     $rowClass = '';
                     if ($isAnswered) {
-                        $rowClass = $isCorrect ? 'correct' : 'incorrect';
+                        $rowClass = $taskScore === $taskMaxScore ? 'correct' : ($taskScore > 0 ? 'partial' : 'incorrect');
                     } else {
                         $rowClass = 'no-answer';
                     }
@@ -615,8 +618,8 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                         </td>
                         <td>
                             <?php if ($isAnswered): ?>
-                                <span class="score-circle <?= $isCorrect ? 'score-correct' : 'score-incorrect' ?>">
-                                    <?= $isCorrect ? '✓' : '✗' ?>
+                                <span class="score-circle <?= $taskScore === $taskMaxScore ? 'score-correct' : 'score-incorrect' ?>">
+                                    <?= $taskScore ?>/<?= $taskMaxScore ?>
                                 </span>
                             <?php else: ?>
                                 <span>-</span>
@@ -637,6 +640,10 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
                 <div class="legend-item">
                     <div class="legend-color" style="background-color: #f8d7da;"></div>
                     <span>Неправильный ответ</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #d1ecf1;"></div>
+                    <span>Частичный балл</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background-color: #fff3cd;"></div>
@@ -820,6 +827,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
             background-color: #f8d7da !important;
             color: #721c24;
         }
+        .partial { background-color: #d1ecf1 !important; color: #0c5460; }
 
         .no-answer {
             background-color: #fff3cd !important;
@@ -837,7 +845,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
 
         .score-circle {
             display: inline-block;
-            width: 30px;
+            min-width: 44px;
             height: 30px;
             border-radius: 50%;
             text-align: center;
@@ -1020,10 +1028,12 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                         $userAnswer = isset($answersMap[$taskID]) ? $answersMap[$taskID]['value'] : '';
                         $isAnswered = trim($userAnswer) !== '';
                         $isCorrect = $isAnswered ? checkAnswer($task['correct_answer'], $userAnswer, $task['answer_type']) : false;
+                        $taskMaxScore = in_array($task['number'], [26, 27], true) ? 2 : 1;
+                        $taskScore = scoreAnswer($task['correct_answer'], $userAnswer, $task['answer_type'], $task['number']);
 
                         $rowClass = '';
                         if ($isAnswered) {
-                            $rowClass = $isCorrect ? 'correct' : 'incorrect';
+                            $rowClass = $taskScore === $taskMaxScore ? 'correct' : ($taskScore > 0 ? 'partial' : 'incorrect');
                         } else {
                             $rowClass = 'no-answer';
                         }
@@ -1064,8 +1074,8 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                             </td>
                             <td>
                                 <?php if ($isAnswered): ?>
-                                    <span class="score-circle <?= $isCorrect ? 'score-correct' : 'score-incorrect' ?>">
-                                        <?= $isCorrect ? '✓' : '✗' ?>
+                                    <span class="score-circle <?= $taskScore === $taskMaxScore ? 'score-correct' : 'score-incorrect' ?>">
+                                        <?= $taskScore ?>/<?= $taskMaxScore ?>
                                     </span>
                                 <?php else: ?>
                                     <span>-</span>
@@ -1086,6 +1096,10 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <div style="width: 20px; height: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb;"></div>
                         <span>Неправильный ответ</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 20px; height: 20px; background-color: #d1ecf1; border: 1px solid #bee5eb;"></div>
+                        <span>Частичный балл</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <div style="width: 20px; height: 20px; background-color: #fff3cd; border: 1px solid #ffeaa7;"></div>
