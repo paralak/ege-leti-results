@@ -28,7 +28,7 @@ function stageUploadedXml($field, $expectedRoot, $targetName, $expectedKind = ''
 }
 
 function validateBundle($tasks, $key, $answers) {
-    if (!preg_match('/^\d{1,32}$/D', (string)$answers['kim_number'])) {
+    if (trim((string)$answers['kim_number']) === '') {
         throw new RuntimeException('answers.xml не содержит корректный номер КИМ');
     }
 
