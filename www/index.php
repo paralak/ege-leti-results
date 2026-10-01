@@ -28,6 +28,10 @@ function stageUploadedXml($field, $expectedRoot, $targetName, $expectedKind = ''
 }
 
 function validateBundle($tasks, $key, $answers) {
+    if (!preg_match('/^\d{1,32}$/D', (string)$answers['kim_number'])) {
+        throw new RuntimeException('answers.xml не содержит корректный номер КИМ');
+    }
+
     $taskMap = [];
     foreach ($tasks->task as $task) {
         $id = (string)$task->id;
@@ -164,7 +168,7 @@ function exportResults() {
 
     // Отправляем файл для скачивания
     header('Content-Type: text/html');
-    header('Content-Disposition: attachment; filename="results_' . date('Y-m-d_H-i-s') . '.html"');
+    header('Content-Disposition: attachment; filename="results_KIM-' . $stats['kimNumber'] . '_' . date('Y-m-d_H-i-s') . '.html"');
     echo $html;
     exit;
 }
@@ -250,6 +254,7 @@ function loadData($tasksFilePath, $keyFilePath, $answersFilePath) {
     $percentage = $maxScore > 0 ? round(($score / $maxScore) * 100, 1) : 0;
 
     $stats = [
+        'kimNumber' => (string)$answers['kim_number'],
         'totalTasks' => $totalTasks,
         'answered' => $answered,
         'correct' => $correct,
@@ -533,6 +538,7 @@ function generateExportHTML($tasksArray, $answersMap, $stats, $tasksFilePath, $a
 
         <div class="header-info">
             <p><strong>Дата генерации:</strong> <?= date('d.m.Y H:i:s') ?></p>
+            <p><strong>Номер КИМ:</strong> <?= htmlspecialchars($stats['kimNumber']) ?></p>
             <p><strong>Файл с задачами:</strong> <?= htmlspecialchars(basename($tasksFilePath)) ?></p>
             <p><strong>Файл с ответами:</strong> <?= htmlspecialchars(basename($answersFilePath)) ?></p>
         </div>
@@ -987,6 +993,7 @@ list($tasksArray, $answersMap, $stats) = loadData($tasksFilePath, $keyFilePath, 
 
         <div class="file-info">
             <strong>Информация о файлах:</strong><br>
+            Номер КИМ: <strong><?= htmlspecialchars($stats['kimNumber'] ?: 'не указан') ?></strong><br>
             Загружено задач: <?= $stats['totalTasks'] ?><br>
             Файл задач: <?= htmlspecialchars(basename($tasksFilePath)) ?><br>
             Ключ ответов: <?= htmlspecialchars(basename($keyFilePath)) ?><br>
